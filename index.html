@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Лабиринт времени</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Georgia', serif;
+    background: radial-gradient(circle at 50% 0%, #2a1e3d 0%, #120c1c 60%, #0a0612 100%);
+    color: #f0e6d2;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow-x: hidden;
+  }
+
+  .scene { width: 100%; max-width: 950px; text-align: center; }
+
+  h1 {
+    font-size: clamp(1.6rem, 4vw, 2.6rem);
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+    text-shadow: 0 0 20px rgba(200, 160, 255, 0.4);
+  }
+
+  .subtitle {
+    font-style: italic;
+    opacity: 0.75;
+    margin-bottom: 26px;
+    font-size: clamp(0.85rem, 2vw, 1.05rem);
+    line-height: 1.5;
+  }
+
+  .progress-wrap { max-width: 520px; margin: 0 auto 34px; }
+  .progress-label {
+    display: flex; justify-content: space-between;
+    font-size: 0.85rem; opacity: 0.8;
+    margin-bottom: 8px; letter-spacing: 1px;
+  }
+  .progress-label b { color: #ffd28a; }
+  .progress-bar {
+    height: 12px; border-radius: 10px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+  }
+  .progress-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #ffd28a, #ff8a5c);
+    border-radius: 10px;
+    transition: width 0.6s ease;
+    box-shadow: 0 0 14px rgba(255,180,100,0.6);
+  }
+
+  .doors {
+    display: flex; justify-content: center;
+    gap: clamp(14px, 4vw, 30px);
+    perspective: 1000px; flex-wrap: wrap;
+  }
+
+  .door {
+    width: clamp(120px, 28vw, 180px);
+    height: clamp(210px, 42vw, 320px);
+    border: none; cursor: pointer; position: relative;
+    background: linear-gradient(160deg, #4a3422 0%, #2e1f12 60%, #1b110a 100%);
+    border-radius: 90px 90px 6px 6px;
+    box-shadow:
+      0 0 0 3px #1a1008, 0 0 0 5px #6b4a2e,
+      0 18px 40px rgba(0,0,0,0.65),
+      inset 0 0 40px rgba(0,0,0,0.7);
+    transition: transform 0.35s cubic-bezier(.2,.9,.3,1.3), box-shadow 0.35s;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; color: #ffe9c0;
+    font-family: inherit; padding: 14px; overflow: hidden;
+  }
+  .door::before {
+    content: ''; position: absolute; inset: 14px;
+    border-radius: 74px 74px 3px 3px;
+    border: 2px solid rgba(255, 210, 140, 0.22);
+    pointer-events: none;
+  }
+  .door:hover {
+    transform: translateY(-10px) rotateY(-4deg) scale(1.03);
+    box-shadow:
+      0 0 0 3px #1a1008, 0 0 0 5px #a67840,
+      0 26px 55px rgba(0,0,0,0.8),
+      0 0 45px rgba(255, 190, 100, 0.35),
+      inset 0 0 40px rgba(0,0,0,0.6);
+  }
+  .door:active { transform: translateY(-4px) scale(1.0); }
+
+  .door .knob {
+    position: absolute; right: 18px; top: 52%;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ffe9a8, #a87c2e 60%, #5c3d10);
+    box-shadow: 0 0 8px rgba(255, 210, 120, 0.7);
+  }
+  
+  /* Стили для названий дверей */
+  .door .label {
+    font-size: clamp(0.9rem, 2.2vw, 1.1rem);
+    text-transform: uppercase; letter-spacing: 1px;
+    opacity: 0.9; z-index: 1;
+    line-height: 1.3;
+    font-weight: bold;
+    text-align: center;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+  }
+  .door .question {
+    font-size: clamp(2rem, 6vw, 3rem);
+    font-weight: bold; z-index: 1;
+    text-shadow: 0 0 18px rgba(255, 200, 110, 0.55);
+  }
+  .door .hint {
+    font-size: 0.72rem; font-style: italic;
+    opacity: 0.6; z-index: 1; padding: 0 6px;
+  }
+  .door.revealed { cursor: default; transform: none !important; }
+  .door.revealed:hover { transform: none !important; }
+  .door.revealed .question { animation: pop 0.5s ease; }
+  @keyframes pop { 0% { transform: scale(0.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+  .door.study { background: linear-gradient(160deg, #4a3422 0%, #2e1f12 60%, #1b110a 100%); color: #ffe9c0; }
+  .door.rest { background: linear-gradient(160deg, #1f3a34 0%, #14261f 60%, #0b1611 100%); color: #d4ffe9; }
+  .door.rest .knob { background: radial-gradient(circle at 35% 35%, #b8ffe0, #2e8a63 60%, #10402c); box-shadow: 0 0 8px rgba(120, 255, 200, 0.6); }
+  .door.rest .question { text-shadow: 0 0 18px rgba(120, 255, 200, 0.5); }
+
+  .door.exit {
+    background: linear-gradient(160deg, #3d2350 0%, #241432 60%, #120a1c 100%);
+    color: #e8d4ff;
+    box-shadow:
+      0 0 0 3px #120a1c, 0 0 0 5px #7b5aa8,
+      0 18px 40px rgba(0,0,0,0.7),
+      0 0 50px rgba(180, 120, 255, 0.5),
+      inset 0 0 40px rgba(0,0,0,0.7);
+  }
+  .door.exit .knob { background: radial-gradient(circle at 35% 35%, #e8d4ff, #7b5aa8 60%, #3d2350); box-shadow: 0 0 12px rgba(200, 150, 255, 0.9); }
+  .door.exit .question { text-shadow: 0 0 22px rgba(200, 150, 255, 0.8); }
+
+  .timer-view { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .ring-wrap { position: relative; width: clamp(230px, 60vw, 320px); height: clamp(230px, 60vw, 320px); }
+  svg.ring { transform: rotate(-90deg); width: 100%; height: 100%; }
+  .ring-bg { fill: none; stroke: rgba(255,255,255,0.08); stroke-width: 10; }
+  .ring-fg {
+    fill: none; stroke: url(#gradStudy); stroke-width: 10;
+    stroke-linecap: round; transition: stroke-dashoffset 0.9s linear;
+    filter: drop-shadow(0 0 8px rgba(255,190,110,0.6));
+  }
+  .ring-fg.rest { stroke: url(#gradRest); filter: drop-shadow(0 0 8px rgba(120,255,200,0.5)); }
+
+  .time-display {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .time-display .big {
+    font-size: clamp(2.4rem, 9vw, 3.8rem);
+    font-variant-numeric: tabular-nums; font-weight: bold;
+    transition: opacity 0.3s;
+  }
+  .time-display .mode {
+    font-size: 0.8rem; letter-spacing: 3px;
+    text-transform: uppercase; opacity: 0.7; margin-top: 4px;
+  }
+
+  .pause-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .pause-badge {
+    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(255,210,150,0.4);
+    padding: 8px 22px; border-radius: 40px;
+    font-size: 0.9rem; letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #ffd28a;
+    backdrop-filter: blur(4px);
+    opacity: 0; transition: opacity 0.3s;
+    animation: pulseOpacity 1.8s ease-in-out infinite;
+  }
+  .pause-badge.show { opacity: 1; }
+  @keyframes pulseOpacity { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+  .btn {
+    font-family: inherit; font-size: 0.95rem;
+    padding: 12px 26px; border-radius: 40px;
+    border: 1px solid rgba(255,210,150,0.4);
+    background: rgba(255,210,150,0.08);
+    color: #ffe9c0; cursor: pointer;
+    transition: all 0.25s; letter-spacing: 1px;
+  }
+  .btn:hover { background: rgba(255,210,150,0.2); transform: translateY(-2px); }
+  .btn.ghost { border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.55); font-size: 0.8rem; padding: 8px 18px; }
+  .btn.paused { background: rgba(255,210,150,0.3); border-color: rgba(255,210,150,0.8); }
+
+  .btn.primary {
+    background: linear-gradient(135deg, rgba(255,210,150,0.25), rgba(255,140,90,0.2));
+    border-color: rgba(255,200,120,0.6);
+    font-size: 1.05rem; padding: 16px 40px;
+    box-shadow: 0 0 30px rgba(255,180,100,0.25);
+  }
+  .btn.primary:hover {
+    background: linear-gradient(135deg, rgba(255,210,150,0.4), rgba(255,140,90,0.35));
+    box-shadow: 0 0 40px rgba(255,180,100,0.45);
+  }
+
+  .stats {
+    position: fixed; top: 14px; right: 16px;
+    font-size: 0.78rem; opacity: 0.7;
+    text-align: right; line-height: 1.6;
+    pointer-events: none; z-index: 10;
+  }
+  .stats b { color: #ffd28a; font-size: 1rem; }
+  .stats .rest-b { color: #9dffd0; }
+
+  .fade { animation: fadeIn 0.5s ease both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 3px #1a1008, 0 0 0 5px #6b4a2e, 0 18px 40px rgba(0,0,0,0.65), 0 0 0 0 rgba(255,200,120,0.5); }
+    50% { box-shadow: 0 0 0 3px #1a1008, 0 0 0 5px #6b4a2e, 0 18px 40px rgba(0,0,0,0.65), 0 0 0 16px rgba(255,200,120,0); }
+  }
+
+  .flash {
+    position: fixed; inset: 0; background: white; opacity: 0; pointer-events: none; z-index: 99;
+    animation: flashAnim 0.9s ease;
+  }
+  @keyframes flashAnim { 0% { opacity: 0; } 15% { opacity: 0.75; } 100% { opacity: 0; } }
+
+  .result-badge {
+    display: inline-block; padding: 8px 22px;
+    border-radius: 30px; font-size: 0.9rem; letter-spacing: 1px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+
+  .final-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 14px; max-width: 620px; margin: 24px auto;
+  }
+  .final-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px; padding: 18px 12px;
+  }
+  .final-card .num { font-size: 1.9rem; font-weight: bold; color: #ffd28a; display: block; }
+  .final-card.rest .num { color: #9dffd0; }
+  .final-card .cap {
+    font-size: 0.75rem; letter-spacing: 1.5px;
+    text-transform: uppercase; opacity: 0.7; margin-top: 4px;
+  }
+  .goal-reached { font-size: 1.15rem; color: #9dffd0; margin: 10px 0; letter-spacing: 1px; }
+  .goal-missed { font-size: 1.05rem; color: #ffb08a; margin: 10px 0; font-style: italic; }
+</style>
+</head>
+<body>
+
+<div class="stats" id="stats">
+  Учёба: <b id="statStudy">0</b> / 300 мин<br>
+  Отдых: <b class="rest-b" id="statRest">0</b> мин<br>
+  Сессий: <b id="statSessions">0</b>
+</div>
+
+<div class="scene" id="scene"></div>
+
+<script>
+/* ================== КОНФИГУРАЦИЯ ================== */
+const STUDY_TIMES = [30, 45, 60];
+const REST_TIMES  = [15, 30];
+const GOAL_MINUTES = 300;
+const EARLY_EXIT_CHANCE = 0.12;
+
+// Наборы атмосферных названий для дверей
+const DOOR_NAMES = [
+  "Тихая комната",
+  "Зал амбиций",
+  "Тайный проход",
+  "Библиотека теней",
+  "Кабинет мудрости",
+  "Портал грёз",
+  "Уютный уголок",
+  "Комната тишины",
+  "Зеркальный зал",
+  "Старый архив",
+  "Башня знаний",
+  "Сад размышлений",
+  "Келья отшельника",
+  "Лаборатория идей",
+  "Оранжерея",
+  "Чертоги памяти"
+];
+
+/* ================== СОСТОЯНИЕ ================== */
+let totalStudyMin = 0;
+let totalRestMin = 0;
+let sessions = 0;
+let timerId = null;
+let remaining = 0;
+let totalSeconds = 0;
+let isPaused = false;
+let doorContents = [];
+let inMaze = false;
+
+const scene = document.getElementById('scene');
+
+/* ================== УТИЛИТЫ ================== */
+function fmt(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function updateStats() {
+  document.getElementById('statStudy').textContent = totalStudyMin;
+  document.getElementById('statRest').textContent = totalRestMin;
+  document.getElementById('statSessions').textContent = sessions;
+}
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.18, 0.36].forEach((t, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = [660, 880, 1100][i];
+      osc.type = 'sine';
+      osc.connect(gain); gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.4);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + 0.45);
+    });
+  } catch(e) {}
+}
+function flash() {
+  const f = document.createElement('div');
+  f.className = 'flash';
+  document.body.appendChild(f);
+  setTimeout(() => f.remove(), 950);
+}
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function progressPercent() { return Math.min(100, (totalStudyMin / GOAL_MINUTES) * 100); }
+function goalReached() { return totalStudyMin >= GOAL_MINUTES; }
+
+/* ================== СТАРТ ================== */
+function showEntrance() {
+  inMaze = false;
+  totalStudyMin = 0;
+  totalRestMin = 0;
+  sessions = 0;
+  updateStats();
+
+  scene.innerHTML = `
+    <div class="fade">
+      <h1>🗝️ Вход в лабиринт</h1>
+      <p class="subtitle">
+        Ты стоишь перед входом в лабиринт времени.<br>
+        За дверями — учёба и отдых. Твоя цель — <b style="color:#ffd28a">${GOAL_MINUTES} минут (5 часов)</b> учёбы.<br>
+        Где-то там есть дверь-выход. Откроется ли она раньше времени — неизвестно.<br>
+        <span style="opacity:0.6; font-size:0.9em;">Шанс раннего выхода: ${Math.round(EARLY_EXIT_CHANCE*100)}% за раунд.</span>
+      </p>
+      <button class="btn primary" id="enterBtn">Войти в лабиринт →</button>
+    </div>
+  `;
+  document.getElementById('enterBtn').addEventListener('click', () => {
+    inMaze = true;
+    showDoors();
+  });
+}
+
+/* ================== ГЕНЕРАЦИЯ ================== */
+function buildDoorContents() {
+  const reached = goalReached();
+  const pool = [
+    ...STUDY_TIMES.map(m => ({ type: 'study', min: m })),
+    ...REST_TIMES.map(m => ({ type: 'rest', min: m }))
+  ];
+  let chosen = shuffle(pool).slice(0, 3);
+  
+  if (!chosen.some(c => c.type === 'study')) {
+    const study = STUDY_TIMES[Math.floor(Math.random() * STUDY_TIMES.length)];
+    chosen[0] = { type: 'study', min: study };
+    chosen = shuffle(chosen);
+  }
+
+  let exitIndex = -1;
+  if (reached) exitIndex = Math.floor(Math.random() * 3);
+  else if (Math.random() < EARLY_EXIT_CHANCE) exitIndex = Math.floor(Math.random() * 3);
+  if (exitIndex >= 0) chosen[exitIndex] = { type: 'exit' };
+
+  // Выбираем 3 случайных названия из списка
+  const randomNames = shuffle(DOOR_NAMES).slice(0, 3);
+  chosen.forEach((door, i) => {
+    door.name = randomNames[i];
+  });
+
+  return chosen;
+}
+
+/* ================== ДВЕРИ ================== */
+function showDoors() {
+  if (!inMaze) { showEntrance(); return; }
+  doorContents = buildDoorContents();
+  const reached = goalReached();
+  const pct = progressPercent();
+
+  scene.innerHTML = `
+    <div class="fade">
+      <h1>📚 Лабиринт времени</h1>
+      <p class="subtitle">
+        ${reached
+          ? '🏁 Ты достигла цели! Дверь-выход точно среди них.'
+          : 'Три двери. За каждой — своя атмосфера. Что выберешь?'}
+      </p>
+      <div class="progress-wrap">
+        <div class="progress-label">
+          <span>Прогресс: <b>${totalStudyMin} / ${GOAL_MINUTES} мин</b></span>
+          <span>${Math.round(pct)}%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${pct}%"></div>
+        </div>
+      </div>
+      <div class="doors">
+        ${doorContents.map((c, i) => `
+          <button class="door ${c.type === 'exit' ? 'exit' : ''} pulse" data-i="${i}" style="animation-delay:${i * 0.15}s">
+            <span class="knob"></span>
+            <span class="label">${c.name}</span>
+            <span class="question">?</span>
+            <span class="hint">Открой, чтобы узнать</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  document.querySelectorAll('.door').forEach(btn => {
+    btn.addEventListener('click', () => revealDoor(parseInt(btn.dataset.i)));
+  });
+}
+
+function revealDoor(index) {
+  const allDoors = document.querySelectorAll('.door');
+  allDoors.forEach(d => { d.classList.remove('pulse'); d.disabled = true; });
+
+  const chosen = doorContents[index];
+  const chosenBtn = allDoors[index];
+
+  chosenBtn.classList.add('revealed');
+  if (chosen.type === 'study') {
+    chosenBtn.classList.add('study');
+    chosenBtn.querySelector('.question').textContent = chosen.min + ' мин';
+    chosenBtn.querySelector('.hint').textContent = '📖 Учёба';
+  } else if (chosen.type === 'rest') {
+    chosenBtn.classList.add('rest');
+    chosenBtn.querySelector('.question').textContent = chosen.min + ' мин';
+    chosenBtn.querySelector('.hint').textContent = '☕ Отдых';
+  } else {
+    chosenBtn.classList.add('exit');
+    chosenBtn.querySelector('.question').textContent = 'ВЫХОД';
+    chosenBtn.querySelector('.hint').textContent = '🚪 Свобода!';
+  }
+
+  setTimeout(() => {
+    allDoors.forEach((d, i) => {
+      if (i === index) return;
+      const other = doorContents[i];
+      d.classList.add('revealed');
+      d.style.opacity = '0.55';
+      if (other.type === 'study') {
+        d.classList.add('study');
+        d.querySelector('.question').textContent = other.min + ' мин';
+        d.querySelector('.hint').textContent = '📖 Учёба';
+      } else if (other.type === 'rest') {
+        d.classList.add('rest');
+        d.querySelector('.question').textContent = other.min + ' мин';
+        d.querySelector('.hint').textContent = '☕ Отдых';
+      } else {
+        d.classList.add('exit');
+        d.querySelector('.question').textContent = 'ВЫХОД';
+        d.querySelector('.hint').textContent = '🚪 Свобода';
+      }
+    });
+  }, 500);
+
+  setTimeout(() => {
+    if (chosen.type === 'exit') { finishMaze(); return; }
+    startTimer(chosen);
+  }, 1600);
+}
+
+/* ================== ТАЙМЕР ================== */
+function startTimer({ type, min, name }) {
+  totalSeconds = min * 60;
+  remaining = totalSeconds;
+  isPaused = false;
+
+  const isStudy = type === 'study';
+  const accent = isStudy ? '#ffd28a' : '#9dffd0';
+  const modeText = isStudy ? 'Учёба' : 'Отдых';
+
+  scene.innerHTML = `
+    <div class="timer-view fade">
+      <h1 style="color:${accent}; font-size:clamp(1.2rem, 3vw, 1.8rem); margin-bottom:0;">Локация: ${name}</h1>
+      <p class="subtitle" style="margin-top:5px;">${isStudy ? '📖 Время учиться. Сосредоточься.' : '☕ Время отдыхать. Расслабься.'}</p>
+
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 200 200">
+          <defs>
+            <linearGradient id="gradStudy" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#ffd28a"/>
+              <stop offset="100%" stop-color="#ff8a5c"/>
+            </linearGradient>
+            <linearGradient id="gradRest" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#9dffd0"/>
+              <stop offset="100%" stop-color="#4fc3a1"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-
